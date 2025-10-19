@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% comment %} Github merge with Gavin's user auth and modify the account creation page {% endcomment %}
+
 {% block content %}
   <div class="row">
     <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary" style="width: 280px;">
@@ -14,71 +16,6 @@
       </a>
 
       <hr>
-
-      <!-- <span class="fs-4"> Filters </span>
-      <form action="/filter" method="post">
-        <div class="list-group">
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block1" checked="">
-            <span>
-              Block 1:Healthy Place to Live and Learn
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block2" checked="">
-            <span>
-              Block 2:Energy for Concentration
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block3" checked="">
-            <span>
-              Block 3: Stability
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block4" checked="">
-            <span>
-              Block 4: Practiced Perception
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block5" checked="">
-            <span>
-              Block 5: Developed Abilties 
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block6" checked="">
-            <span>
-              Block 6: Responsibility
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block7" checked="">
-            <span>
-              Block 7: Discernment
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block8" checked="">
-            <span>
-              Block 8:Resilience
-            </span>
-          </label>
-          <label class="list-group-item d-flex gap-2">
-            <input class="form-check-input flex-shrink-0" type="checkbox" name="block" value="block9" checked="">
-            <span>
-              Block 9: Functional Relationships
-            </span>
-          </label>
-
-          
-          <button type="button" onclick="checkAll()">Check All</button>
-          <button type="button" onclick="uncheckAll()">Uncheck All</button>
-          <button type="submit">Apply Filter</button>
-        </div>
-      </form> -->
     </div>
 
     <div class="modal fade" id="threadModal" tabindex="-1" aria-labelledby="threadModalLabel" aria-hidden="true">
