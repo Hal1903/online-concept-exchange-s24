@@ -1,11 +1,27 @@
 from flask import Blueprint, render_template, send_file, request, jsonify, redirect, url_for, flash, session
-from oce.utils.db_interface import create_post, get_post_by_uuid
+from oce.utils.db_interface import create_post, get_post_by_uuid, create_user, get_user_by_email
 from oce.utils.models import User
 from flask_dance.contrib.github import github, make_github_blueprint
 from flask_dance.consumer.storage.session import BaseStorage
 from dotenv import load_dotenv
 load_dotenv()
 import os
+import stripe
+import json
+import re
+from .. import password_hasher
+
+stripe.api_key = ''
+
+#THIS INSURES NO TAMPERING OF PRICES
+#SINCE THIS IS IN THE BACKEND IT SHOULD BE SAFE
+PRODUCT_CATALOG = {
+    1: {'name': 'Bully Booster 1', 'price': 500},
+    2: {'name': 'Bully Booster 2', 'price': 500},
+    3: {'name': 'Bully Booster 3', 'price': 500},
+    4: {'name': 'Bully Booster 4', 'price': 500},
+    # Add more products as needed
+}
 
 class SessionStorage(BaseStorage):
     def __init__(self, session_key="flask_dance_token"):
@@ -39,6 +55,47 @@ github_blueprint = make_github_blueprint(
     storage=SessionStorage()
 )
 content.register_blueprint(github_blueprint, url_prefix='/github_login')
+
+#@content.route('/content/SignupPage')
+#def signup2():
+#  return render_template('SignupPage.html')
+
+
+@content.route('/content/SignupPage', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        about_me = request.form.get('about_me', '').strip()
+
+        # Basic validation
+        if not username or not email or not password:
+            flash("All fields are required.", "danger")
+            return redirect(url_for('content.signup'))
+
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            flash("Invalid email format.", "danger")
+            return redirect(url_for('content.signup'))
+
+        if get_user_by_email(email):
+            flash("Email already registered.", "warning")
+            return redirect(url_for('content.signup'))
+
+        try:
+            create_user(username=username, email=email, password=password, about_me=about_me)
+            flash("Signup successful! You can now log in.", "success")
+            return redirect(url_for('content.login'))
+        except Exception as e:
+            print(f"Signup error: {e}")
+            flash("An error occurred during signup.", "danger")
+            return redirect(url_for('content.signup'))
+
+    return render_template('SignupPage.html')
+
+@content.route('/content/success')
+def success():
+  return render_template('success.html')
 
 @content.route('/content/block1')
 def block1():
@@ -96,9 +153,34 @@ def concept_exchange():
 def resources(selected_age):
     return render_template('resources.html', selected_age=selected_age)
 
-@content.route('/content/Login/')
+
+@content.route('/content/Login/', methods=['GET', 'POST'])
 def login():
-  return render_template('LoginPage.html')
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+
+        if not email or not password:
+            flash("Please enter both email and password.", "danger")
+            return redirect(url_for('content.login'))
+
+        user = get_user_by_email(email)
+        if not user:
+            flash("No account found with that email.", "danger")
+            return redirect(url_for('content.login'))
+
+        try:
+            password_hasher.verify(user['password'], password)
+        except Exception:
+            flash("Incorrect password.", "danger")
+            return redirect(url_for('content.login'))
+
+        session['user'] = user['username']
+        session['user_uuid'] = user['user_uuid']
+        flash(f"Welcome back, {user['username']}!", "success")
+        return redirect(url_for('content.index'))
+
+    return render_template('LoginPage.html')
 
 @content.route('/content/calendar/')
 def calendar():
@@ -110,6 +192,9 @@ def contact():
 
 @content.route('/content/Shop/')
 def shop():
+  if 'user_uuid' not in session:
+        flash("Please log in to access the shop.", "warning")
+        return redirect(url_for('content.login'))
   return render_template('Shop.html')
 
 @content.route('/content/Cart/')
@@ -132,7 +217,38 @@ def create_post_route():
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+    
+@content.route('/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    cart_json = request.form.get('cart')
+    cart = json.loads(cart_json)
 
+    line_items = []
+
+    for item in cart:
+        product = PRODUCT_CATALOG.get(item['id'])
+        if product:
+            line_items.append({
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': product['name'],
+                    },
+                    'unit_amount': product['price'],
+                },
+                'quantity': item['quantity'],
+            })
+
+    if not line_items:
+        return "Invalid cart", 400
+
+    session = stripe.checkout.Session.create(
+        line_items=line_items,
+        mode='payment',
+        success_url='http://localhost:5000/success?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url='http://localhost:5000/',
+    )
+    return redirect(session.url, code=303)
 # @content.route('/github_login')
 # def github_login():
 #     if not github.authorized:
@@ -261,3 +377,4 @@ def logout():
 @content.route('/')
 def index():
     return render_template('index.html')
+
