@@ -7,9 +7,16 @@ from flask_login import LoginManager
 from flask_session import Session
 import os
 
+# for forum
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 login_manager = LoginManager()
 password_hasher = PasswordHasher()
+
+# for forum
+db = SQLAlchemy() 
+migrate = Migrate()
 
 
 def create_app():

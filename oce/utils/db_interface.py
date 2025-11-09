@@ -43,6 +43,7 @@ def get_db() -> sql.Connection:
                 'App static folder not registered properly. Unable to locate database.'
             )
         con = sql.connect(Path(current_app.static_folder) / current_app.config['DB_NAME'] )
+        print(f"[DEBUG] Database connected at: {Path(current_app.static_folder) / current_app.config['DB_NAME']}")
         con.row_factory = _dict_factory
         db = g._database = con
     return db
@@ -296,50 +297,119 @@ def delete_user(user: User) -> None:
 
 
 #this is temorary, should be relpaced by the function above when the user acounts feature is added
-def create_post(
-    author: str,
-    text_content: str,
-) -> None:
-    
+from flask import session
+from datetime import datetime
+# from oce.utils import create_uuid  # adjust import as needed
+# from oce.db import get_db          # adjust import as needed
+
+def create_post(author: str, text_content: str, is_announcement: bool = False) -> None:
+    """
+    Create a new post (temporary version without user accounts).
+    Stores class_year from the current session selection.
+
+    Args:
+        author: Author name or placeholder (e.g., "Anonymous")
+        text_content: The message content
+        is_announcement: If True, post is visible to all class years
+    """
+
+    # Get class_year (None if announcement or not selected)
+    class_year = session.get('selected_class_year') if not is_announcement else None
+
+    # Create database connection
     con = get_db()
     cur = con.cursor()
 
+    # Define new post tuple
     new_post_data = (
-        str(create_uuid()),
-        author,
-        text_content,
-        'None',
-        'None',
-        'None',
-        'None',
-        'None',
-        'None',
-        'None',
-        'None'
+        str(create_uuid()),         # post_uuid
+        author,                     # author_uuid
+        text_content,               # text_content
+        'None', 'None', 'None', 'None', 'None',  # tags
+        None,                       # image (BLOB)
+        datetime.now().isoformat(), # datetime
+        None,                       # location
+        class_year,                 # class_year
+        int(is_announcement)        # is_announcement
     )
 
+    # Adjusted INSERT statement — now includes 13 fields
     cur.execute(
-        'INSERT INTO POSTS VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
-        new_post_data,
+        """
+        INSERT INTO POSTS (
+            post_uuid, author_uuid, text_content, tag1, tag2, tag3, tag4, tag5,
+            image, datetime, location, class_year, is_announcement
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """,
+        new_post_data
     )
+
     con.commit()
 
-def get_all_posts():
-    """Retrieve all posts from the database."""
+def get_posts_for_class():
+    """Fetch posts only for the user's class (no announcements)."""
     con = get_db()
     cur = con.cursor()
-    cur.execute('SELECT post_uuid, author_uuid, text_content FROM POSTS;')
+
+    class_year = session.get('selected_class_year')
+    print(f"[DEBUG][get_posts_for_class] session class_year: {class_year}")
+    print(f"[DEBUG][get_posts_for_class] session full: {dict(session)}")
+
+    if not class_year:
+        print("[DEBUG][get_posts_for_class] No class year in session — returning []")
+        return []
+
+    cur.execute("""
+        SELECT * FROM POSTS
+        WHERE class_year = ?
+          AND (is_announcement IS NULL OR is_announcement = 0)
+        ORDER BY datetime DESC;
+    """, (class_year,))
+
     rows = cur.fetchall()
-    # Convert rows to dictionaries (if not already)
-    posts = [
-        {
-            'post_uuid': row['post_uuid'],
-            'author_uuid': row['author_uuid'],
-            'text_content': row['text_content']
-        }
-        for row in rows
-    ]
-    return posts
+    print(f"[DEBUG][get_posts_for_class] Rows fetched: {len(rows)}")
+    return rows
+
+
+
+def get_announcements():
+    """Fetch only announcements."""
+    con = get_db()
+    cur = con.cursor()
+
+    cur.execute("""
+        SELECT * FROM POSTS
+        WHERE is_announcement = 1
+        ORDER BY datetime DESC;
+    """)
+    rows = cur.fetchall()
+    print(f"[DEBUG][get_announcements] Announcement count: {len(rows)}")
+
+    return cur.fetchall()
+
+
+def get_all_posts():
+    """Fetch posts filtered by selected class year and announcements."""
+    con = get_db()
+    cur = con.cursor()
+
+    class_year = session.get('selected_class_year')
+
+    if class_year:
+        cur.execute("""
+            SELECT * FROM POSTS
+            WHERE class_year = ? OR is_announcement = 1
+            ORDER BY datetime DESC;
+        """, (class_year,))
+    else:
+        # fallback — show only announcements
+        cur.execute("""
+            SELECT * FROM POSTS
+            WHERE is_announcement = 1
+            ORDER BY datetime DESC;
+        """)
+
+    return cur.fetchall()
 
 
 def get_post_by_uuid(post_uuid: str) -> DatabaseRow | None:
@@ -721,3 +791,37 @@ def delete_comment(comment: Comment) -> None:
         (comment.comment_uuid,),
     )
     con.commit()
+
+
+from datetime import datetime
+
+def get_all_groups(selected_age=None):
+    """Return available groups based on selected age."""
+    current_year = datetime.now().year
+    base_groups = [
+        {'id': 1, 'name': f'Class Year {current_year}'},
+        {'id': 2, 'name': f'Class Year {current_year + 1}'},
+        {'id': 3, 'name': f'Class Year {current_year + 2}'},
+        {'id': 4, 'name': 'Announcements'},
+    ]
+
+    if selected_age is None:
+        return base_groups
+
+    # Map ages to class indices (adjust mapping to your app logic)
+    class_index = min(selected_age, 3)
+    filtered_groups = [
+        base_groups[class_index - 1],  # Class Year X
+        base_groups[-1],               # Announcements
+    ]
+    return filtered_groups
+
+
+# def get_all_groups():
+#     current_year = datetime.now().year
+#     return [
+#         {'id': 1, 'name': f'Class Year {current_year}'},
+#         {'id': 2, 'name': f'Class Year {current_year + 1}'},
+#         {'id': 3, 'name': f'Class Year {current_year + 2}'},
+#         {'id': 4, 'name': 'Announcements'},
+#     ]

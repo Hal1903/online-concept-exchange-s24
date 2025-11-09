@@ -137,20 +137,145 @@ def block9():
 def tiles():
     return send_file('static/docs/Human-Domino-Effect-Footprint-Tiles.pdf', download_name='Human-Domino-Effect-Footprint-Tiles.pdf')
 
+from flask import render_template, session
+from oce.utils import db_interface
 @content.route('/content/ConceptExchange/')
-def concept_exchange():
-    from oce.utils.db_interface import get_all_posts
-    
-    try:
-        # Fetch all posts from the database
-        posts = get_all_posts()
-        return render_template('mainForum.html', posts=posts)
-    except Exception as e:
-        print(f"Error fetching posts: {e}")
-        return render_template('mainForum.html', posts=[])
+@content.route('/content/ConceptExchange/<group_id>')
+def concept_exchange(group_id=None):
+    con = db_interface.get_db()
+    cur = con.cursor()
 
-@content.route('/content/resources/<selected_age>')
+    # --- Determine selected group ---
+    if group_id == "announcement":
+        session['selected_class_year'] = None
+        active_group = "announcement"
+        posts = db_interface.get_announcements()
+        selected_group_name = "Announcements"
+    elif group_id is not None:
+        try:
+            class_year = int(group_id)
+            session['selected_class_year'] = class_year
+            active_group = str(class_year)
+            posts = db_interface.get_posts_for_class(class_year)
+            selected_group_name = f"Class of {class_year}"
+        except ValueError:
+            posts = []
+            active_group = None
+            selected_group_name = "Invalid group"
+    else:
+        # Default: Announcements
+        session['selected_class_year'] = None
+        active_group = "announcement"
+        posts = db_interface.get_announcements()
+        selected_group_name = "Announcements"
+
+    # --- Sidebar groups ---
+    cur.execute("""
+        SELECT DISTINCT class_year 
+        FROM POSTS 
+        WHERE class_year IS NOT NULL
+        ORDER BY class_year DESC;
+    """)
+    groups = [
+        {"id": str(row["class_year"]), "name": f"Class of {row['class_year']}"}
+        for row in cur.fetchall()
+    ]
+    groups.insert(0, {"id": "announcement", "name": "Announcements"})
+
+    print(f"[DEBUG] Showing {selected_group_name}, active_group={active_group}, posts={len(posts)}")
+
+    return render_template(
+        "mainForum.html",
+        posts=posts,
+        groups=groups,
+        show_sidebar=True,
+        selected_group_name=selected_group_name,
+        active_group=active_group,
+    )
+
+
+# def concept_exchange():
+#     posts = db_interface.get_posts_for_class()
+#     return render_template(
+#         'mainForum.html',
+#         posts=posts,
+#         show_sidebar=True,
+#         active_group='concept_exchange',
+#         is_announcement_page=False
+#     )
+
+
+@content.route('/announcements')
+def announcements():
+    posts = db_interface.get_announcements()
+    return render_template(
+        'mainForum.html',
+        posts=posts,
+        show_sidebar=True,
+        active_group='announcements',
+        is_announcement_page=True
+    )
+
+from datetime import datetime
+from flask import request, redirect, url_for, flash, session
+
+@content.route('/select_age', methods=['POST'])
+def select_age():
+    """Handle age selection and redirect to the appropriate Concept Exchange forum."""
+    try:
+        age = int(request.form.get('age', 0))
+        print(f"[DEBUG] Received age from form: {age}")
+
+        # Validate the age
+        if age <= 0:
+            flash("Please select a valid age.", "warning")
+            print("[DEBUG] Invalid age submitted — redirecting to resources.")
+            return redirect(url_for('content.resources'))
+
+        # Compute "Class of XXXX"
+        current_year = datetime.now().year
+        class_year = current_year + (18 - age)
+        print(f"[DEBUG] Current year: {current_year}, Computed class year: {class_year}")
+
+        # Store both in the Flask session
+        session['selected_age'] = age
+        session['selected_class_year'] = class_year
+        session.modified = True   # ensures persistence
+        print(f"[DEBUG] Session updated: {dict(session)}")
+
+        # Redirect to the Concept Exchange forum
+        return redirect(url_for('content.concept_exchange'))
+
+    except Exception as e:
+        print(f"[ERROR] Exception in select_age: {e}")
+        flash("An error occurred while processing your selection.", "danger")
+        return redirect(url_for('content.resources'))
+
+# @content.route('/content/ConceptExchange/')
+# def concept_exchange():
+#     from oce.utils.db_interface import get_all_posts, get_all_groups
+
+#     try:
+#         posts = get_all_posts()
+#         group_list = get_all_groups()  # <-- You'll need to implement or import this
+#     except Exception as e:
+#         print(f"Error fetching posts or groups: {e}")
+#         posts, group_list = [], []
+
+#     return render_template(
+#         'mainForum.html',
+#         posts=posts,
+#         show_sidebar=True,  # enables the sidebar block in base.html
+#         groups=group_list   # passes the groups to sidebar
+#     )
+
+
+
+
+@content.route('/content/resources/<int:selected_age>')
+@content.route('/resources/<int:selected_age>')
 def resources(selected_age):
+    session['selected_age'] = selected_age
     return render_template('resources.html', selected_age=selected_age)
 
 
@@ -203,20 +328,52 @@ def cart():
 
 @content.route('/create_post', methods=['POST'])
 def create_post_route():
-    data = request.get_json()  # Get JSON data from the request
-    text_content = data.get('text_content')  # Extract the post content
-    username = data.get('username')
-
-    if not text_content:
-        return jsonify({'success': False, 'error': 'Text content is required.'}), 400
+    """
+    Handle AJAX post creation.
+    Uses the class_year stored in session to categorize the post.
+    """
 
     try:
-        # create_post(author=User(user_uuid="example", username="name", email="example@email.com", password="password", profile_pic=b"", about_me=''), text_content=text_content, tag1='', tag2='', tag3='', tag4='', tag5='', datetime='', location='', image=None)
-        create_post(author=username, text_content=text_content)  # this should be updated when the user login feature is added to look more like the one above this line
-        return jsonify({'success': True})
+        data = request.get_json()
+
+        # Extract the post data
+        author = data.get('username', 'Anonymous')
+        text_content = data.get('text_content', '').strip()
+        is_announcement = bool(data.get('is_announcement', False))
+
+        # Validate text content
+        if not text_content:
+            return jsonify({'success': False, 'error': 'Empty post'}), 400
+
+        # Log session info for debugging
+        print(f"[DEBUG] Author: {author}, Text: {text_content}, Announcement: {is_announcement}")
+        print(f"[DEBUG] Session class_year: {session.get('selected_class_year')}")
+
+        # Create post
+        create_post(author, text_content, is_announcement=is_announcement)
+
+        return jsonify({'success': True}), 200
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"[ERROR] Failed to create post: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# @content.route('/create_post', methods=['POST'])
+# def create_post_route():
+#     data = request.get_json()  # Get JSON data from the request
+#     text_content = data.get('text_content')  # Extract the post content
+#     username = data.get('username')
+
+#     if not text_content:
+#         return jsonify({'success': False, 'error': 'Text content is required.'}), 400
+
+#     try:
+#         # create_post(author=User(user_uuid="example", username="name", email="example@email.com", password="password", profile_pic=b"", about_me=''), text_content=text_content, tag1='', tag2='', tag3='', tag4='', tag5='', datetime='', location='', image=None)
+#         create_post(author=username, text_content=text_content)  # this should be updated when the user login feature is added to look more like the one above this line
+#         return jsonify({'success': True})
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         return jsonify({'success': False, 'error': str(e)}), 500
     
 @content.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
@@ -377,4 +534,5 @@ def logout():
 @content.route('/')
 def index():
     return render_template('index.html')
+
 
