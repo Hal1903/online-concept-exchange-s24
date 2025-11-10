@@ -346,21 +346,25 @@ def create_post(author: str, text_content: str, is_announcement: bool = False) -
 
     con.commit()
 
-def get_posts_for_class():
+def get_posts_for_class(class_year=None):
     """Fetch posts only for the user's class (no announcements)."""
     con = get_db()
     cur = con.cursor()
 
-    class_year = session.get('selected_class_year')
-    print(f"[DEBUG][get_posts_for_class] session class_year: {class_year}")
-    print(f"[DEBUG][get_posts_for_class] session full: {dict(session)}")
+    # Prefer explicit argument; fallback to session
+    if class_year is None:
+        class_year = session.get('selected_class_year')
+    print(f"[DEBUG][get_posts_for_class] Using class_year: {class_year}")
+    print(f"[DEBUG][get_posts_for_class] Full session: {dict(session)}")
 
     if not class_year:
         print("[DEBUG][get_posts_for_class] No class year in session — returning []")
         return []
 
+    # Fetch posts for this class (not announcements)
     cur.execute("""
-        SELECT * FROM POSTS
+        SELECT *
+        FROM POSTS
         WHERE class_year = ?
           AND (is_announcement IS NULL OR is_announcement = 0)
         ORDER BY datetime DESC;

@@ -1,7 +1,6 @@
 from secrets import token_urlsafe
-
 from argon2 import PasswordHasher
-from flask import Flask
+from flask import Flask, session
 from flask_dance.contrib.github import make_github_blueprint, github
 from flask_login import LoginManager
 from flask_session import Session
@@ -13,9 +12,7 @@ from flask_migrate import Migrate
 
 login_manager = LoginManager()
 password_hasher = PasswordHasher()
-
-# for forum
-db = SQLAlchemy() 
+db = SQLAlchemy()
 migrate = Migrate()
 
 
@@ -24,13 +21,12 @@ def create_app():
     app.config['DB_NAME'] = 'oce.db'  # TODO: extract into config file
     app.secret_key = token_urlsafe(32)  # TODO: extract into config file
     login_manager.init_app(app)
-    app.config['SESSION_TYPE'] = 'filesystem'  # Store session data in files
-    app.config['SESSION_PERMANENT'] = False  # Ensure session resets properly
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_PERMANENT'] = False
 
     Session(app)
-    
+
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-    #Github OAuth config
     github_blueprint = make_github_blueprint()
     app.register_blueprint(github_blueprint, url_prefix="/github_login")
 
@@ -39,10 +35,16 @@ def create_app():
     from oce.errors.handlers import errors
     from oce.forum.routes import forum
 
-    
     app.register_blueprint(accounts)
     app.register_blueprint(content)
     app.register_blueprint(errors)
     app.register_blueprint(forum)
+
+    # auto-admin for dev
+    from flask import session
+    @app.before_request
+    def force_admin_for_dev():
+        if 'user' not in session:
+            session['user'] = 'admin'
 
     return app

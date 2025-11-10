@@ -77,30 +77,23 @@
               {% for group in groups %}
                 
                 <li>
-                  {% if group.id == "announcement" %}
-                    <a 
-                      href="{{ url_for('content.concept_exchange', group_id=None) | replace('%2FNone', '/announcement') }}"
-                      class="nav-link {% if active_group == group.id %}fw-bold text-primary{% endif %}"
-                    >
-                      {{ group.name }}
-                    </a>
-                  {% else %}
-                    <a 
-                      href="{{ url_for('content.concept_exchange', group_id=group.id) }}"
-                      class="nav-link {% if active_group == group.id %}fw-bold text-primary bg-light{% endif %}"
-                    >
-                      {{ group.name }}
-                    </a>
-                  {% endif %}
-                  <!--
-                  <a 
-                    href="{{ url_for('content.concept_exchange', group_id=group.id) }}"
-                    class="nav-link {% if active_group == group.id %}fw-bold text-primary{% endif %}"
+                {% if group.id == "announcement" %}
+                  <a
+                    href="{{ url_for('content.concept_exchange', group_id='announcement') }}"
+                    class="nav-link {% if active_group == group.id %}fw-bold text-primary bg-light{% endif %}"
                   >
                     {{ group.name }}
                   </a>
-                  -->
-                </li>
+                {% else %}
+                  <a
+                    href="{{ url_for('content.concept_exchange', group_id=group.id) }}"
+                    class="nav-link {% if active_group|string == group.id|string %}fw-bold text-primary bg-light{% endif %}"
+                  >
+                    {{ group.name }}
+                  </a>
+                {% endif %}
+              </li>
+
 
               {% endfor %}
             </ul>
