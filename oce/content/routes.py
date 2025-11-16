@@ -214,38 +214,6 @@ def announcements():
 from datetime import datetime
 from flask import request, redirect, url_for, flash, session
 
-# @content.route('/select_age', methods=['POST'])
-# def select_age():
-#     """Handle age selection and redirect to the appropriate Concept Exchange forum."""
-#     try:
-#         age = int(request.form.get('age', 0))
-#         print(f"[DEBUG] Received age from form: {age}")
-
-#         # Validate the age
-#         if age <= 0:
-#             flash("Please select a valid age.", "warning")
-#             print("[DEBUG] Invalid age submitted — redirecting to resources.")
-#             return redirect(url_for('content.resources'))
-
-#         # Compute "Class of XXXX"
-#         current_year = datetime.now().year
-#         class_year = current_year + (18 - age)
-#         print(f"[DEBUG] Current year: {current_year}, Computed class year: {class_year}")
-
-#         # Store both in the Flask session
-#         session['selected_age'] = age
-#         session['selected_class_year'] = class_year
-#         session.modified = True   # ensures persistence
-#         print(f"[DEBUG] Session updated: {dict(session)}")
-
-#         # Redirect to the Concept Exchange forum
-#         return redirect(url_for('content.concept_exchange'))
-
-#     except Exception as e:
-#         print(f"[ERROR] Exception in select_age: {e}")
-#         flash("An error occurred while processing your selection.", "danger")
-#         return redirect(url_for('content.resources'))
-
 @content.route('/select_age', methods=['POST'])
 def select_age():
     """Handle age selection and redirect to the appropriate Concept Exchange forum."""
@@ -254,7 +222,7 @@ def select_age():
         print(f"[DEBUG] Received age from form: {age}")
 
         # Validate the age
-        if age <= 0:
+        if age < 0:
             flash("Please select a valid age.", "warning")
             print("[DEBUG] Invalid age submitted — redirecting to resources.")
             return redirect(url_for('content.resources'))
@@ -279,13 +247,25 @@ def select_age():
         return redirect(url_for('content.resources'))
 
 
-
-
+@content.route('/content/resources/', defaults={'selected_age': None})
 @content.route('/content/resources/<int:selected_age>')
+@content.route('/resources/', defaults={'selected_age': None})
 @content.route('/resources/<int:selected_age>')
-def resources(selected_age):
-    session['selected_age'] = selected_age
+def resources(selected_age=None):
+    # If selected_age is provided (including 0), keep it; otherwise fallback to session or None
+    if selected_age is None:
+        selected_age = session.get('selected_age')
+    # store if not None so templates can use it
+    if selected_age is not None:
+        session['selected_age'] = selected_age
     return render_template('resources.html', selected_age=selected_age)
+
+
+# @content.route('/content/resources/<int:selected_age>')
+# @content.route('/resources/<int:selected_age>')
+# def resources(selected_age):
+#     session['selected_age'] = selected_age
+#     return render_template('resources.html', selected_age=selected_age)
 
 
 @content.route('/content/Login/', methods=['GET', 'POST'])
